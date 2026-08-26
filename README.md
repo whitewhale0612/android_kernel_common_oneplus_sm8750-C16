@@ -45,9 +45,11 @@
   4 KiB block，以减少后端空间占用和物理写入，这也和上游未合并的压缩流回写(无论压缩后有多大，都只写入一个4 KiB block)不同，ZMS能节省更多空间；
 - **SDDC 相似性压缩**：对完全相同的压缩流使用 alias，对相似数据使用 delta 表示；
   资源不足或校验失败时回退到普通压缩路径。
-- **LZ4KD**：当前 4 KiB 构建默认压缩器，提供普通压缩与 SDDC delta codec。
-- **SDDC 原生 ZMS 写回**：通过引用代际、slot 状态和 wire format 校验，将合法的
-  alias/delta 表示写入 ZMS。
+- **LZ4KD / LZ4KDS**：`LZ4KD` 是独立的普通压缩算法；原先的
+  “LZ4KD + SDDC” 已经独立成为 `LZ4KDS`，当前 4 KiB 构建默认使用
+  `LZ4KDS`。`LZ4KD` 和 `LZ4KDS` 是两种不同算法。
+- **SDDC 驻留压缩**：通过引用代际、slot 状态和 wire format 校验管理 alias/delta
+  表示；转换后的 slot 仅驻留内存，不会写入 ZMS。
 - 支持 idle/huge/incompressible page 写回、预取、batch-in、per-memcg 控制、eventfd
   压力通知和多层统计接口。
 - 提供 `hybridswap_report`、`hybridswap_crystal_stat`、`sddc_stat`、`zms_stat` 等诊断节点。
@@ -57,11 +59,15 @@
 下表为本项目提供的测试结果。压缩比和吞吐量越高越好，延迟越低越好；具体测试环境和数据集
 请以对应测试记录为准，表中数据不代表所有设备、温度和负载下的绝对性能。
 
+> [!WARNING]
+> `LZ4KDS` 仍存在已知的读回稳定性问题：读回时可能读到错误页或零页，进而导致应用崩溃或
+> `system_server` 崩溃。因此不建议在日常使用中启用；表中的 `LZ4KDS` 数据仅供测试参考。
+
 | Algorithm | Payload Ratio | Physical Ratio | Write MiB/s | 4K Rand Read MiB/s | 4K Mean / P99 |
 |---|---:|---:|---:|---:|---:|
 | LZ4 | 1.5715 | 1.5412 | 162.0 | 4985.5 | 5.70 / 9.28 µs |
 | ZSTD | 1.9565 | 1.9121 | 28.6 | 1551.7 | 19.57 / 30.85 µs |
-| LZ4KD + SDDC | **2.1750** | **2.1299** | 124.3 | 4412.2 | 6.53 / 12.22 µs |
+| LZ4KDS | **2.1750** | **2.1299** | 124.3 | 4412.2 | 6.53 / 12.22 µs |
 | LZO-RLE | 1.5608 | 1.5328 | **168.4** | 4102.9 | 7.07 / 11.97 µs |
 
 ### 💾 内存回收与低内存优化
@@ -108,6 +114,7 @@
   项目的覆写配置，均应视为未验证适配素材。
 - **Module overlay framework** 可在模块加载时拦截目标模块，并使用内核内嵌的 zstd
   压缩版本替换用户态传入模块。
+- **Droidspace 支持**：当前 GKI 配置已支持 Droidspace（DroidSpaces）运行。
 - Qualcomm SCM、充电协议和 OPLUS vendor 兼容路径包含设备专用修复。
 
 

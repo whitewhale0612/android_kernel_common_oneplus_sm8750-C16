@@ -51,10 +51,11 @@ loss caused by using this kernel.
   writeback: regardless of the compressed size, one object consumes one 4 KiB block, while ZMS can save more space.
 - **SDDC similarity compression**: uses aliases for identical compressed streams and deltas for similar
   streams, with fallback to the ordinary compression path when resources or validation are unavailable.
-- **LZ4KD**: the default compressor for the current 4 KiB build, providing ordinary compression and the
-  SDDC delta codec.
-- **Native SDDC writeback to ZMS**: writes validated alias/delta representations to ZMS using reference
-  generations, slot state, and wire-format validation.
+- **LZ4KD / LZ4KDS**: `LZ4KD` is a standalone ordinary compressor. The former “LZ4KD + SDDC”
+  combination is now the standalone `LZ4KDS` algorithm, which is the default for the current 4 KiB
+  build. `LZ4KD` and `LZ4KDS` are two distinct algorithms.
+- **Resident SDDC compression**: manages validated alias/delta representations using reference
+  generations, slot state, and wire-format checks; converted slots remain resident and are not written to ZMS.
 - Supports idle, huge, and incompressible page writeback, prefetch, batch-in, per-memcg controls, eventfd
   pressure notifications, and layered statistics.
 - Provides diagnostic nodes such as `hybridswap_report`, `hybridswap_crystal_stat`, `sddc_stat`, and `zms_stat`.
@@ -65,11 +66,16 @@ The following results are provided by this project. Higher ratios and throughput
 latency is better. See the corresponding test record for the exact environment and dataset; these numbers
 do not represent absolute performance on every device, temperature, or workload.
 
+> [!WARNING]
+> `LZ4KDS` still has a known readback stability issue: readback may return a wrong page or a zero page,
+> which can crash applications or `system_server`. It is not recommended for daily use; the `LZ4KDS`
+> result below is provided for testing reference only.
+
 | Algorithm | Payload Ratio | Physical Ratio | Write MiB/s | 4K Rand Read MiB/s | 4K Mean / P99 |
 |---|---:|---:|---:|---:|---:|
 | LZ4 | 1.5715 | 1.5412 | 162.0 | 4985.5 | 5.70 / 9.28 µs |
 | ZSTD | 1.9565 | 1.9121 | 28.6 | 1551.7 | 19.57 / 30.85 µs |
-| LZ4KD + SDDC | **2.1750** | **2.1299** | 124.3 | 4412.2 | 6.53 / 12.22 µs |
+| LZ4KDS | **2.1750** | **2.1299** | 124.3 | 4412.2 | 6.53 / 12.22 µs |
 | LZO-RLE | 1.5608 | 1.5328 | **168.4** | 4102.9 | 7.07 / 11.97 µs |
 
 ### 💾 Memory Reclaim and Low-Memory Tuning
@@ -120,6 +126,7 @@ do not represent absolute performance on every device, temperature, or workload.
   included, but should be treated as unvalidated adaptation material.
 - **Module overlay framework** can intercept module loads and replace userspace-provided modules with
   zstd-compressed versions embedded in the kernel.
+- **Droidspace support**: the current GKI configuration supports running Droidspace (DroidSpaces).
 - Device-specific fixes cover Qualcomm SCM, charging protocols, and OPLUS vendor compatibility paths.
 
 ## 🙏 Acknowledgements
